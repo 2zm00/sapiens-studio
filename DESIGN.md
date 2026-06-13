@@ -10,12 +10,13 @@
 - **4컷 · 세로 1열** 컨셉을 바꾸지 말 것. 콜라주 / 2×2 그리드 등으로 임의 변형 금지.
 
 ## 톤 & 무드
-- **배경: 뮤트된 메탈릭 홀로그래픽(실크) 그라데이션을 전역 배경으로 모든 페이지(`/`, `/booth`, 결과 화면 등)에 적용.**
-  채도는 낮게(은은한 시안·라벤더·핑크 + 화이트 윤기). `app/globals.css`의 `body`에 정의, 뷰포트 고정(`background-attachment: fixed`),
-  `chromeFlow` 애니메이션으로 천천히 흐른다. 다크모드는 어두운 메탈릭.
-- **배경 애니메이션 `chromeFlow`**: `app/globals.css`에 `@keyframes chromeFlow`로 정의.
-  `background-size`를 200%로 키우고 `background-position`을 `0% 0% → 100% 100% → 0% 0%`로 25s 순환시켜
-  메탈 표면의 윤기가 좌상↔우하로 흐르게 한다(은은하게, `ease-in-out infinite`).
+- **배경: 쿨톤 메탈릭 홀로그래픽(실크) 그라데이션을 전역 배경으로 모든 페이지(`/`, `/booth`, 결과 화면 등)에 적용.**
+  채도는 낮게, 톤은 블루·시안 위주(쿨톤) + 화이트 윤기. 다크모드는 어두운 메탈릭.
+- **배경 애니메이션 `chromeFlow`**: `app/globals.css`의 `@keyframes chromeFlow`로 정의하고
+  **`body::before`(position: fixed, 전체 뷰포트, z-index:-1) 레이어**에서 돌린다.
+  `background-attachment: fixed` + `background-position` 애니메이션은 리페인트가 안 돼 정지처럼 보이므로,
+  고정 레이어로 분리해 `background-size`(220%)를 키우고 position을 `0%→100%→0%`(18s)로 순환시켜 윤기가 흐르게 한다.
+  `prefers-reduced-motion: reduce`면 애니메이션 정지.
 - **클릭 버튼은 리퀴드 글래스(반투명 유리) 스타일**: `app/globals.css`의 `.liquid-glass` 유틸 사용.
   반투명 배경 + `backdrop-filter: blur` + 안쪽 하이라이트. 레이아웃(패딩·radius·텍스트)은 유틸리티로, 질감만 `.liquid-glass`로.
   메탈릭 배경 위에서 떠 보이도록 하며 다크모드 변형 포함.

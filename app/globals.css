@@ -33,53 +33,76 @@
   0% {
     background-position: 0% 0%;
   }
+
   50% {
     background-position: 100% 100%;
   }
+
   100% {
     background-position: 0% 0%;
   }
 }
 
-/* 뮤트된 메탈릭 홀로그래픽(실크) — 채도를 낮춰 은은하게. background-size>100% + chromeFlow로 천천히 흐른다. */
+/*
+ * 쿨톤 메탈릭 홀로그래픽(실크) 배경.
+ * background-attachment:fixed + background-position 애니메이션은 일부 브라우저에서 리페인트가
+ * 안 돼 정지처럼 보인다 → position:fixed 인 body::before 레이어에서 chromeFlow를 돌려 확실히 흐르게 한다.
+ */
 body {
   color: var(--foreground);
   font-family: "Pretendard Variable", Pretendard, system-ui, -apple-system,
     "Apple SD Gothic Neo", sans-serif;
-  background-color: #ecedf0;
+  background-color: #e9edf3;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: #eaf0f6;
+  /* 레퍼런스(홀로그래픽 실크)처럼 더 생기 있게: 채도·알파 ↑, 쿨톤(시안·라벤더·블루) 중심 + 핑크 악센트 */
   background-image:
-    linear-gradient(
-      115deg,
-      rgba(184, 217, 226, 0.5) 0%,
-      rgba(255, 255, 255, 0) 28%,
-      rgba(226, 208, 222, 0.42) 52%,
-      rgba(255, 255, 255, 0) 74%,
-      rgba(199, 219, 220, 0.42) 100%
-    ),
-    radial-gradient(at 22% 26%, rgba(255, 255, 255, 0.7), transparent 46%),
-    radial-gradient(at 78% 32%, rgba(198, 212, 230, 0.45), transparent 52%),
-    radial-gradient(at 58% 82%, rgba(219, 205, 226, 0.4), transparent 55%);
-  background-size: 200% 200%, 170% 170%, 170% 170%, 170% 170%;
-  background-attachment: fixed;
+    linear-gradient(120deg,
+      rgba(172, 228, 227, 0.72) 0%,
+      rgb(255, 255, 255) 24%,
+      rgba(193, 184, 245, 0.64) 48%,
+      rgba(239, 214, 214, 0) 70%,
+      rgba(164, 206, 248, 0.879) 100%),
+    radial-gradient(at 18% 22%, rgba(255, 255, 255, 0.82), transparent 44%),
+    radial-gradient(at 82% 26%, rgba(120, 216, 230, 0.66), transparent 50%),
+    radial-gradient(at 30% 80%, rgba(228, 168, 224, 0.52), transparent 52%),
+    radial-gradient(at 72% 86%, rgba(160, 170, 246, 0.6), transparent 55%);
+  background-size: 220% 220%, 185% 185%, 185% 185%, 185% 185%, 185% 185%;
   background-repeat: no-repeat;
-  animation: chromeFlow 25s ease-in-out infinite;
+  animation: chromeFlow 18s ease-in-out infinite;
 }
 
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: #0e0f12;
+    background-color: #0c0f14;
+  }
+
+  body::before {
+    background-color: #0c0f14;
     background-image:
-      linear-gradient(
-        115deg,
-        rgba(92, 120, 134, 0.3) 0%,
-        rgba(255, 255, 255, 0) 30%,
-        rgba(120, 102, 130, 0.28) 55%,
-        rgba(255, 255, 255, 0) 78%,
-        rgba(96, 120, 120, 0.26) 100%
-      ),
-      radial-gradient(at 22% 26%, rgba(120, 138, 158, 0.24), transparent 50%),
-      radial-gradient(at 78% 76%, rgba(120, 104, 140, 0.24), transparent 55%);
-    background-size: 200% 200%, 170% 170%, 170% 170%;
+      linear-gradient(120deg,
+        rgba(72, 168, 180, 0.42) 0%,
+        rgba(255, 255, 255, 0) 28%,
+        rgba(118, 110, 188, 0.4) 52%,
+        rgba(255, 255, 255, 0) 76%,
+        rgba(86, 142, 196, 0.42) 100%),
+      radial-gradient(at 18% 22%, rgba(130, 168, 196, 0.32), transparent 50%),
+      radial-gradient(at 82% 78%, rgba(126, 116, 190, 0.32), transparent 55%);
+    background-size: 220% 220%, 185% 185%, 185% 185%;
+  }
+}
+
+/* 모션 최소화 선호 시 애니메이션 정지 */
+@media (prefers-reduced-motion: reduce) {
+  body::before {
+    animation: none;
   }
 }
 
@@ -106,15 +129,18 @@ body {
     box-shadow 0.25s ease,
     transform 0.12s ease;
 }
+
 .liquid-glass:hover {
   background-color: rgba(255, 255, 255, 0.32);
   box-shadow:
     0 10px 40px rgba(0, 0, 0, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
+
 .liquid-glass:active {
   transform: translateY(1px) scale(0.99);
 }
+
 .liquid-glass:disabled {
   opacity: 0.5;
   pointer-events: none;
@@ -128,6 +154,7 @@ body {
       0 8px 32px rgba(0, 0, 0, 0.45),
       inset 0 1px 0 rgba(255, 255, 255, 0.14);
   }
+
   .liquid-glass:hover {
     background-color: rgba(255, 255, 255, 0.16);
   }
