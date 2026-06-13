@@ -2,13 +2,13 @@
 
 import { useCallback, useState } from "react";
 import CameraStage from "./CameraStage";
-import ResultActions from "./ResultActions";
-import StripPreview from "./StripPreview";
+import ResultStage from "./ResultStage";
+import TemplatePicker from "./TemplatePicker";
 import { canvasToPngBlob, renderStrip } from "@/lib/compose";
 import { templates } from "@/lib/templates";
 import type { FrameTemplate } from "@/types";
 
-type Phase = "capture" | "rendering" | "result";
+type Phase = "selecting" | "capture" | "rendering" | "result";
 
 export interface BoothFlowProps {
   /** 카운트다운 초 (검증용으로 단축 가능) */
@@ -16,28 +16,29 @@ export interface BoothFlowProps {
 }
 
 /**
- * 촬영 → 합성 → 결과 다운로드 플로우.
- * M3: 템플릿은 classic-white 고정. M4에서 선택 UI로 교체한다.
+ * 템플릿 선택 → 촬영 → 합성 → 결과 다운로드 플로우.
  */
 export default function BoothFlow({ countdownSeconds = 3 }: BoothFlowProps) {
-  const template: FrameTemplate = templates[0]; // M4: TemplatePicker로 교체 예정
+  const [template, setTemplate] = useState<FrameTemplate>(templates[0]);
 
-  const [phase, setPhase] = useState<Phase>("capture");
+  const [phase, setPhase] = useState<Phase>("selecting");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [stripCanvas, setStripCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [photos, setPhotos] = useState<ImageBitmap[]>([]);
   const [capturedAt, setCapturedAt] = useState<Date>(() => new Date());
   const [error, setError] = useState<string | null>(null);
 
   const handleComplete = useCallback(
-    async (photos: ImageBitmap[]) => {
+    async (captured: ImageBitmap[]) => {
       setPhase("rendering");
       setError(null);
       try {
         const now = new Date();
-        const canvas = await renderStrip(template, photos, { date: now });
+        const canvas = await renderStrip(template, captured, { date: now });
         const blob = await canvasToPngBlob(canvas);
         setCapturedAt(now);
         setStripCanvas(canvas);
+        setPhotos(captured); // 개별 컷 다운로드용으로 원본 보존
         setPreviewUrl((prev) => {
           if (prev) URL.revokeObjectURL(prev);
           return URL.createObjectURL(blob);
@@ -57,23 +58,48 @@ export default function BoothFlow({ countdownSeconds = 3 }: BoothFlowProps) {
       return null;
     });
     setStripCanvas(null);
-    setPhase("capture");
+    setPhotos((prev) => {
+      prev.forEach((b) => b.close?.());
+      return [];
+    });
+    setError(null);
+    setPhase("selecting");
   }, []);
+
+  if (phase === "selecting") {
+    return (
+      <div className="flex w-full flex-col items-center gap-6">
+        <h2 className="font-serif text-2xl text-neutral-900 dark:text-neutral-50">
+          템플릿을 골라주세요
+        </h2>
+        <TemplatePicker
+          templates={templates}
+          selectedId={template.id}
+          onSelect={setTemplate}
+        />
+        <button
+          onClick={() => {
+            setError(null);
+            setPhase("capture");
+          }}
+          className="liquid-glass rounded-full px-8 py-3 text-xs font-medium uppercase tracking-widest text-neutral-900 dark:text-white"
+        >
+          이 템플릿으로 촬영 시작
+        </button>
+      </div>
+    );
+  }
 
   if (phase === "result" && previewUrl && stripCanvas) {
     return (
-      <div className="flex w-full flex-col items-center gap-6">
-        <h2 className="text-xl font-bold">완성!</h2>
-        <p className="text-sm text-gray-500">템플릿: {template.name}</p>
-        <StripPreview src={previewUrl} widthPx={300} />
-        <ResultActions stripCanvas={stripCanvas} capturedAt={capturedAt} />
-        <button
-          onClick={restart}
-          className="rounded-lg border border-gray-400 px-6 py-3 font-semibold"
-        >
-          다시 만들기
-        </button>
-      </div>
+      <ResultStage
+        template={template}
+        stripPreviewUrl={previewUrl}
+        stripCanvas={stripCanvas}
+        photos={photos}
+        capturedAt={capturedAt}
+        onRestart={restart}
+      />
     );
   }
 
@@ -87,6 +113,7 @@ export default function BoothFlow({ countdownSeconds = 3 }: BoothFlowProps) {
       ) : (
         <CameraStage
           countdownSeconds={countdownSeconds}
+          cameraBackground={template.cameraBackground}
           onComplete={handleComplete}
         />
       )}

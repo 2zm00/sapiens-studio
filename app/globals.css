@@ -19,8 +19,112 @@
   }
 }
 
+/*
+ * 메탈릭 홀로그래픽 그라데이션을 앱 전역 배경으로 적용(body, 뷰포트 고정).
+ * 모든 라우트(/, /booth, 결과 등)에서 동일하게 깔리고, chromeFlow @keyframes로 천천히 흐른다.
+ * 흐름 원리: background-size를 200%로 키운 뒤 background-position을 0%→100%→0%로 순환시켜
+ * 그라데이션 레이어가 좌상↔우하로 부드럽게 이동(메탈 표면의 윤기가 흐르는 느낌).
+ * 카드·버튼 등 표면은 각 컴포넌트에서 솔리드/리퀴드 글래스로 덮어 가독성 확보.
+ */
+@keyframes chromeFlow {
+  0% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+  100% {
+    background-position: 0% 0%;
+  }
+}
+
+/* 뮤트된 메탈릭 홀로그래픽(실크) — 채도를 낮춰 은은하게. background-size>100% + chromeFlow로 천천히 흐른다. */
 body {
-  background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  background-color: #ecedf0;
+  background-image:
+    linear-gradient(
+      115deg,
+      rgba(184, 217, 226, 0.5) 0%,
+      rgba(255, 255, 255, 0) 28%,
+      rgba(226, 208, 222, 0.42) 52%,
+      rgba(255, 255, 255, 0) 74%,
+      rgba(199, 219, 220, 0.42) 100%
+    ),
+    radial-gradient(at 22% 26%, rgba(255, 255, 255, 0.7), transparent 46%),
+    radial-gradient(at 78% 32%, rgba(198, 212, 230, 0.45), transparent 52%),
+    radial-gradient(at 58% 82%, rgba(219, 205, 226, 0.4), transparent 55%);
+  background-size: 200% 200%, 170% 170%, 170% 170%, 170% 170%;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  animation: chromeFlow 25s ease-in-out infinite;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #0e0f12;
+    background-image:
+      linear-gradient(
+        115deg,
+        rgba(92, 120, 134, 0.3) 0%,
+        rgba(255, 255, 255, 0) 30%,
+        rgba(120, 102, 130, 0.28) 55%,
+        rgba(255, 255, 255, 0) 78%,
+        rgba(96, 120, 120, 0.26) 100%
+      ),
+      radial-gradient(at 22% 26%, rgba(120, 138, 158, 0.24), transparent 50%),
+      radial-gradient(at 78% 76%, rgba(120, 104, 140, 0.24), transparent 55%);
+    background-size: 200% 200%, 170% 170%, 170% 170%;
+  }
+}
+
+/* 결과 스트립 프레임의 부드러운 그림자 */
+.film-strip-shadow {
+  box-shadow: 0 32px 64px -16px rgba(0, 0, 0, 0.18);
+}
+
+/*
+ * 리퀴드 글래스(반투명 유리) 버튼.
+ * 반투명 배경 + 배경 블러 + 안쪽 하이라이트로 유리질감을 낸다.
+ * 레이아웃(패딩·radius·텍스트)은 각 버튼의 유틸리티 클래스로, 질감만 이 클래스로.
+ */
+.liquid-glass {
+  background-color: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  transition:
+    background-color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.12s ease;
+}
+.liquid-glass:hover {
+  background-color: rgba(255, 255, 255, 0.32);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+.liquid-glass:active {
+  transform: translateY(1px) scale(0.99);
+}
+.liquid-glass:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .liquid-glass {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+  .liquid-glass:hover {
+    background-color: rgba(255, 255, 255, 0.16);
+  }
 }
