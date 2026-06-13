@@ -246,10 +246,10 @@ export default function CameraStage({
       {/* idle: 사용자 제스처로 카메라 시작 (iOS 대응) */}
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12 text-center">
-          <h2 className="text-2xl font-bold">촬영 준비</h2>
-          <p className="text-sm text-gray-500">
+          <h1 className="font-serif text-2xl font-bold">촬영 준비</h1>
+          <h2 className="text-sm text-gray-500">
             카메라 권한을 허용하면 {cutCount}컷을 순차 촬영합니다.
-          </p>
+          </h2>
           <button
             onClick={() => begin(deviceId)}
             className="liquid-glass rounded-full px-8 py-3 font-semibold text-neutral-900 dark:text-white"
@@ -334,9 +334,8 @@ export default function CameraStage({
 
           {/* 셔터 플래시 */}
           <div
-            className={`pointer-events-none absolute inset-0 bg-white transition-opacity duration-200 ${
-              flash ? "opacity-90" : "opacity-0"
-            }`}
+            className={`pointer-events-none absolute inset-0 bg-white transition-opacity duration-200 ${flash ? "opacity-90" : "opacity-0"
+              }`}
           />
 
           {/* 현재 컷 표시 */}
@@ -392,11 +391,10 @@ export default function CameraStage({
             {captured.map((bmp, i) => (
               <div
                 key={i}
-                className={`relative aspect-[4/3] w-full overflow-hidden rounded-md ${
-                  phase === "capturing" && currentCut === i
-                    ? "ring-2 ring-blue-500"
-                    : ""
-                } ${bmp ? "" : "bg-gray-100 dark:bg-gray-800"}`}
+                className={`relative aspect-[4/3] w-full overflow-hidden rounded-md ${phase === "capturing" && currentCut === i
+                  ? "ring-2 ring-blue-500"
+                  : ""
+                  } ${bmp ? "" : "bg-gray-100 dark:bg-gray-800"}`}
               >
                 {bmp ? (
                   <BitmapThumb
