@@ -2,10 +2,14 @@
    App Router 루트 레이아웃의 <head> <link>는 전 페이지에 적용되며,
    next/font는 한국어 웹폰트(Pretendard/Noto Serif KR)를 깔끔히 로드하기 어려워 CDN으로 로드한다. */
 import type { Metadata } from "next";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import { BRAND } from "@/lib/brand";
 import { SITE_URL } from "@/lib/site";
 import SiteFooter from "@/components/SiteFooter";
 import "./globals.css";
+
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
+const GSC_VERIFICATION = process.env.NEXT_PUBLIC_GSC_VERIFICATION;
 
 const TITLE = "Sapiens Studio - 웹캠 4컷 인생네컷 사진";
 const DESCRIPTION =
@@ -44,6 +48,8 @@ export const metadata: Metadata = {
     title: TITLE,
     description: DESCRIPTION,
   },
+  // Search Console 사이트 확인: NEXT_PUBLIC_GSC_VERIFICATION 있을 때만 메타 출력
+  verification: GSC_VERIFICATION ? { google: GSC_VERIFICATION } : undefined,
 };
 
 export default function RootLayout({
@@ -74,6 +80,8 @@ export default function RootLayout({
         {children}
         <SiteFooter />
       </body>
+      {/* GA4: NEXT_PUBLIC_GA_ID 있을 때만 주입 */}
+      {GA_ID && <GoogleAnalytics gaId={GA_ID} />}
     </html>
   );
 }
