@@ -1,3 +1,4 @@
+import { BRAND } from "@/lib/brand";
 import type {
   FrameTemplate,
   PhotoSlot,
@@ -138,6 +139,28 @@ export async function renderStrip(
   return canvas;
 }
 
+/**
+ * 단일 스트립(1060×3187)을 좌우로 2장 배치해 4×6 인쇄용 2120×3187 캔버스를 만든다.
+ * export 규격 고정이므로 devicePixelRatio 스케일을 절대 적용하지 않는다.
+ */
+export function renderPrint4x6(strip: HTMLCanvasElement): HTMLCanvasElement {
+  if (strip.width !== 1060 || strip.height !== 3187) {
+    throw new Error(
+      `스트립 캔버스는 1060×3187이어야 합니다 — 받은 값: ${strip.width}×${strip.height}.`,
+    );
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = 2120; // 1060 × 2 절대 픽셀
+  canvas.height = 3187;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D 컨텍스트를 생성할 수 없습니다.");
+
+  ctx.drawImage(strip, 0, 0);
+  ctx.drawImage(strip, 1060, 0);
+
+  return canvas;
+}
+
 export function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -157,5 +180,13 @@ export function downloadBlob(blob: Blob, filename: string) {
 }
 
 export function stripFilename(now: Date = new Date()): string {
-  return `lifefourcuts_${now.getTime()}.png`;
+  return `${BRAND.slug}_${now.getTime()}.png`;
+}
+
+export function printFilename(now: Date = new Date()): string {
+  return `${BRAND.slug}_4x6_${now.getTime()}.png`;
+}
+
+export function cutFilename(index: number, now: Date = new Date()): string {
+  return `${BRAND.slug}_cut${index + 1}_${now.getTime()}.png`;
 }
