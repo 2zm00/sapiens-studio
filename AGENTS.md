@@ -4,7 +4,8 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-# 프로젝트: 인생네컷 포토부스 웹앱
+# 프로젝트: Sapiens Studio (세로 4컷 포토부스 웹앱)
+# ※ "Sapiens Studio"는 브랜드명. "세로 4컷 스트립"은 제품 컨셉/카테고리 — 컨셉은 바꾸지 말 것.
 
 ## 절대 규칙 (어떤 경우에도 변경 금지)
 - 단일 스트립 export 캔버스는 **정확히 1060 × 3187 px**. 임의로 바꾸지 말 것.

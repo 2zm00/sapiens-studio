@@ -1,3 +1,7 @@
+# Sapiens Studio
+
+웹에서 찍는 인생네컷(세로 4컷 스트립) 포토부스. 웹캠으로 4컷을 촬영해 프레임 템플릿에 합성하고 인쇄 규격 PNG로 다운로드합니다. 100% 클라이언트 사이드.
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
