@@ -11,9 +11,9 @@ import "./globals.css";
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 const GSC_VERIFICATION = process.env.NEXT_PUBLIC_GSC_VERIFICATION;
 
-const TITLE = "Sapiens Studio - 웹캠 4컷 인생네컷 사진";
+const TITLE = "Sapiens Studio - 소중한 순간을 담는 셀프 스튜디오";
 const DESCRIPTION =
-  "설치·회원가입 없이 웹캠으로 4컷을 찍고, 다양한 테마 프레임에 담아 고해상도(인쇄용 4×6) PNG로 만들 수 있는 온라인 셀프 포토부스입니다.";
+  "언제 어디서나 소중한 순간을 담는 셀프 스튜디오. 웹에서 즐기는 4컷 포토부스.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

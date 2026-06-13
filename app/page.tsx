@@ -49,7 +49,7 @@ function SampleStrip({ template }: { template: FrameTemplate }) {
 
 const STEPS = [
   { n: "①", title: "프레임 선택", desc: "원하는 테마를 고르세요." },
-  { n: "②", title: "4컷 촬영", desc: "카운트다운에 맞춰 찰칵." },
+  { n: "②", title: "카메라 권한 설정, 4컷 촬영", desc: "카운트다운에 맞춰 찰칵." },
   { n: "③", title: "다운로드", desc: "인쇄 규격 PNG로 저장." },
 ];
 
@@ -70,14 +70,14 @@ export default function Home() {
         {/* 히어로 */}
         <section className="flex flex-col items-center gap-6 text-center">
           <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-neutral-500">
-            Web Photo Booth
+            Web Photo Studio
           </p>
           <h1 className="font-serif text-5xl tracking-tight text-neutral-900 sm:text-6xl dark:text-neutral-50">
             {BRAND.name}
           </h1>
-          <p className="max-w-md text-balance text-lg text-neutral-600 dark:text-neutral-300">
-            {BRAND.tagline}. 웹캠으로 4컷을 찍어 프레임에 담고 인쇄 규격 그대로
-            다운로드하세요. 설치도, 로그인도 필요 없어요.
+          <p className="max-w-md whitespace-pre-line text-balance text-lg text-neutral-600 dark:text-neutral-300">
+            {BRAND.tagline}.<br />
+            언제 어디서나 소중한 순간을 담는 셀프 스튜디오입니다.
           </p>
           <Link
             href="/booth"
