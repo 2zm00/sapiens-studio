@@ -120,10 +120,6 @@ export default function Home() {
             ))}
           </ol>
         </section>
-
-        <footer className="mt-4 text-center text-xs text-zinc-400">
-          © {new Date().getFullYear()} {BRAND.name}. {BRAND.tagline}
-        </footer>
       </main>
     </div>
   );
