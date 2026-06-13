@@ -17,20 +17,38 @@ const EDGE_FEATHER_PX = 3; // 마스크 경계 페더링(자글거림 완화)
 
 let segmenterPromise: Promise<ImageSegmenter> | null = null;
 
-/** 셀피 세그멘터를 1회만 로드해 재사용한다. 실패 시 캐시를 비워 재시도를 허용. */
+async function createSegmenter(
+  delegate: "GPU" | "CPU",
+): Promise<ImageSegmenter> {
+  const { FilesetResolver, ImageSegmenter } = await import(
+    "@mediapipe/tasks-vision"
+  );
+  const fileset = await FilesetResolver.forVisionTasks(WASM_BASE);
+  return ImageSegmenter.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: MODEL_URL, delegate },
+    runningMode: "VIDEO",
+    outputConfidenceMasks: true, // 셀피 모델: confidenceMasks[0] = 사람(전경) 확률
+    outputCategoryMask: false,
+  });
+}
+
+/**
+ * 셀피 세그멘터를 1회만 로드해 재사용한다.
+ * 모바일 등 WebGL GPU delegate 미지원 환경을 위해 GPU 실패 시 CPU delegate로 폴백한다.
+ * 둘 다 실패하면 캐시를 비워 재시도를 허용(상위에서 원본 카메라로 폴백).
+ */
 export function loadSegmenter(): Promise<ImageSegmenter> {
   if (!segmenterPromise) {
     segmenterPromise = (async () => {
-      const { FilesetResolver, ImageSegmenter } = await import(
-        "@mediapipe/tasks-vision"
-      );
-      const fileset = await FilesetResolver.forVisionTasks(WASM_BASE);
-      return ImageSegmenter.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
-        runningMode: "VIDEO",
-        outputConfidenceMasks: true, // 셀피 모델: confidenceMasks[0] = 사람(전경) 확률
-        outputCategoryMask: false,
-      });
+      try {
+        return await createSegmenter("GPU");
+      } catch (gpuErr) {
+        console.warn(
+          "[segmenter] GPU delegate 실패 — CPU로 폴백합니다.",
+          gpuErr,
+        );
+        return await createSegmenter("CPU");
+      }
     })().catch((err) => {
       segmenterPromise = null;
       throw err;

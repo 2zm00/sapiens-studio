@@ -302,7 +302,8 @@ export default function CameraStage({
             autoPlay
             playsInline
             muted
-            className="aspect-video w-full object-cover"
+            // 프리뷰 비율을 스트립 슬롯(970×728 = 4:3)과 동일하게 → 보이는 영역 = 저장되는 컷(WYSIWYG)
+            className="aspect-[4/3] w-full object-cover"
             style={{
               transform: mirror ? "scaleX(-1)" : undefined,
               // 배경 교체가 켜지면 비디오는 소스로만 쓰고 합성 캔버스를 보여준다
