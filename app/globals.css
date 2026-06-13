@@ -8,8 +8,11 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* 한글+영문 통일: sans=Pretendard, serif=Noto Serif KR (둘 다 한글·라틴 글리프 포함) */
+  --font-sans: "Pretendard Variable", Pretendard, system-ui, -apple-system,
+    "Apple SD Gothic Neo", sans-serif;
+  --font-serif: "Noto Serif KR", ui-serif, Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -41,7 +44,8 @@
 /* 뮤트된 메탈릭 홀로그래픽(실크) — 채도를 낮춰 은은하게. background-size>100% + chromeFlow로 천천히 흐른다. */
 body {
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Pretendard Variable", Pretendard, system-ui, -apple-system,
+    "Apple SD Gothic Neo", sans-serif;
   background-color: #ecedf0;
   background-image:
     linear-gradient(

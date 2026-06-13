@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import Link from "next/link";
 import ResultActions from "./ResultActions";
 import {
   canvasToPngBlob,
@@ -128,9 +129,12 @@ export default function ResultStage({
       <div className="mx-auto w-full max-w-5xl px-1 py-2 sm:px-2">
         {/* 브랜드 / 상태 라벨 */}
         <div className="mb-10 flex items-center justify-between">
-          <span className="font-serif text-lg tracking-tight text-neutral-900 dark:text-neutral-100">
+          <Link
+            href="/"
+            className="font-serif text-lg tracking-tight text-neutral-900 transition-opacity hover:opacity-70 dark:text-neutral-100"
+          >
             {BRAND.name}
-          </span>
+          </Link>
         </div>
 
         <div className="flex flex-col gap-12 md:flex-row md:items-center">
