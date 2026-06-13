@@ -69,6 +69,7 @@ export default function BoothFlow({ countdownSeconds = 3 }: BoothFlowProps) {
   if (phase === "selecting") {
     return (
       <div className="flex w-full flex-col items-center gap-6">
+        <h1 className="font-serif text-3xl text-neutral-900 dark:text-neutral-50"> 템플릿 선택</h1>
         <h2 className="font-serif text-2xl text-neutral-900 dark:text-neutral-50">
           템플릿을 골라주세요
         </h2>

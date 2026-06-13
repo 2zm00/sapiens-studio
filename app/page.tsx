@@ -75,7 +75,7 @@ export default function Home() {
           <h1 className="font-serif text-5xl tracking-tight text-neutral-900 sm:text-6xl dark:text-neutral-50">
             {BRAND.name}
           </h1>
-          <p className="max-w-md whitespace-pre-line text-balance text-lg text-neutral-600 dark:text-neutral-300">
+          <p className="font-serif max-w-md whitespace-pre-line text-balance text-lg text-neutral-600 dark:text-neutral-300">
             {BRAND.tagline}.<br />
             언제 어디서나 소중한 순간을 담는 셀프 스튜디오입니다.
           </p>
