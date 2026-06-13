@@ -16,6 +16,16 @@ export interface TextOverlay {
   align?: CanvasTextAlign; // 기본 "center"
 }
 
+/**
+ * 촬영 라이브 프리뷰에서 인물 뒤 배경을 교체하는 정의(M7).
+ * none = 배경 교체 안 함(원본 그대로, 분리 파이프라인 건너뜀).
+ */
+export interface CameraBackground {
+  type: "none" | "color" | "image" | "blur";
+  value?: string; // color: hex / image: 배경 이미지 경로
+  blurAmount?: number; // type==='blur'일 때 px (예: 12)
+}
+
 export interface FrameTemplate {
   id: string;
   name: string;
@@ -24,6 +34,7 @@ export interface FrameTemplate {
   slots: PhotoSlot[]; // 길이 4 고정
   overlays?: TextOverlay[]; // 로고/날짜/문구 등
   foregroundImage?: string; // 사진 위에 덮는 투명 PNG 장식(선택)
+  cameraBackground?: CameraBackground; // 라이브 배경 교체(M7). 없으면 none과 동일.
   canvasWidth: 1060; // 고정
   canvasHeight: 3187; // 고정
 }

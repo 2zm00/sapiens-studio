@@ -10,14 +10,21 @@ import {
   wait,
   type CameraErrorInfo,
 } from "@/lib/camera";
+import { BackgroundReplacer, loadSegmenter } from "@/lib/segmenter";
+import type { CameraBackground } from "@/types";
 
 type Phase = "idle" | "requesting" | "ready" | "capturing" | "review" | "error";
+
+/** 배경 교체 상태: off(미사용) / loading(모델 로드 중) / on(활성) / failed(폴백) */
+type BgStatus = "off" | "loading" | "on" | "failed";
 
 export interface CameraStageProps {
   cutCount?: number;
   countdownSeconds?: number;
   /** 프리뷰/저장 모두 미러로 통일 (기본 true) */
   mirror?: boolean;
+  /** 선택한 템플릿의 라이브 배경 교체 정의(M7). none/미지정이면 분리 파이프라인 미사용. */
+  cameraBackground?: CameraBackground;
   onComplete: (photos: ImageBitmap[]) => void;
   onCancel?: () => void;
 }
@@ -53,16 +60,24 @@ export default function CameraStage({
   cutCount = 4,
   countdownSeconds = 3,
   mirror = true,
+  cameraBackground,
   onComplete,
   onCancel,
 }: CameraStageProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const outCanvasRef = useRef<HTMLCanvasElement>(null);
+  const replacerRef = useRef<BackgroundReplacer | null>(null);
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<CameraErrorInfo | null>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [deviceId, setDeviceId] = useState<string | undefined>(undefined);
+
+  // 배경 교체: 템플릿이 none이 아니면 기본 켜짐
+  const bgDesired = !!cameraBackground && cameraBackground.type !== "none";
+  const [bgEnabled, setBgEnabled] = useState(true);
+  const [bgStatus, setBgStatus] = useState<BgStatus>("off");
 
   const [captured, setCaptured] = useState<(ImageBitmap | null)[]>(
     () => Array.from({ length: cutCount }, () => null),
@@ -131,7 +146,11 @@ export default function CameraStage({
           await wait(1000);
         }
         setCountdown(0);
-        const frame = await captureFrame(video, mirror);
+        // 배경 교체가 활성이면 합성된 프레임을, 아니면 원본 비디오를 캡처
+        const replacer = replacerRef.current;
+        const frame = replacer
+          ? await replacer.capture(mirror)
+          : await captureFrame(video, mirror);
         setCaptured((prev) => {
           const next = [...prev];
           next[cut]?.close?.();
@@ -168,10 +187,57 @@ export default function CameraStage({
     onComplete(photos);
   }, [captured, cutCount, onComplete]);
 
-  // 언마운트 시 스트림 정리
+  // 언마운트 시 스트림 + 배경 교체 루프 정리
   useEffect(() => {
-    return () => stopStream(streamRef.current);
+    return () => {
+      stopStream(streamRef.current);
+      replacerRef.current?.stop();
+      replacerRef.current = null;
+    };
   }, []);
+
+  // 배경 교체 컨트롤러 생명주기: 카메라가 라이브이고 토글이 켜졌을 때만 로드/실행
+  const cameraLive =
+    phase === "ready" || phase === "capturing" || phase === "review";
+  useEffect(() => {
+    const video = videoRef.current;
+    const out = outCanvasRef.current;
+    const shouldRun = bgDesired && bgEnabled && cameraLive && !!video && !!out;
+
+    if (!shouldRun) {
+      if (replacerRef.current) {
+        replacerRef.current.stop();
+        replacerRef.current = null;
+      }
+      // 실패 상태는 유지(폴백 안내), 그 외에는 off로
+      setBgStatus((s) => (s === "failed" ? s : "off"));
+      return;
+    }
+    if (replacerRef.current) return; // 이미 실행 중
+
+    let cancelled = false;
+    setBgStatus("loading");
+    loadSegmenter()
+      .then((segmenter) => {
+        if (cancelled || !videoRef.current || !outCanvasRef.current) return;
+        const replacer = new BackgroundReplacer(
+          segmenter,
+          videoRef.current,
+          outCanvasRef.current,
+          cameraBackground!,
+        );
+        replacer.start();
+        replacerRef.current = replacer;
+        setBgStatus("on");
+      })
+      .catch(() => {
+        // 모델 로드 실패/미지원 → 원본 카메라로 폴백(앱 중단 없음)
+        if (!cancelled) setBgStatus("failed");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bgDesired, bgEnabled, cameraLive, cameraBackground]);
 
   const allCaptured = captured.every((b) => b !== null);
 
@@ -186,7 +252,7 @@ export default function CameraStage({
           </p>
           <button
             onClick={() => begin(deviceId)}
-            className="rounded-lg bg-black px-8 py-3 font-semibold text-white dark:bg-white dark:text-black"
+            className="liquid-glass rounded-full px-8 py-3 font-semibold text-neutral-900 dark:text-white"
           >
             카메라 켜기
           </button>
@@ -206,14 +272,14 @@ export default function CameraStage({
           <div className="flex gap-3">
             <button
               onClick={() => begin(deviceId)}
-              className="rounded-lg bg-black px-6 py-3 font-semibold text-white dark:bg-white dark:text-black"
+              className="liquid-glass rounded-full px-6 py-3 font-semibold text-neutral-900 dark:text-white"
             >
               다시 시도
             </button>
             {onCancel && (
               <button
                 onClick={onCancel}
-                className="rounded-lg border border-gray-400 px-6 py-3 font-semibold"
+                className="liquid-glass rounded-full px-6 py-3 font-semibold text-neutral-900 dark:text-white"
               >
                 취소
               </button>
@@ -237,8 +303,24 @@ export default function CameraStage({
             playsInline
             muted
             className="aspect-video w-full object-cover"
-            style={mirror ? { transform: "scaleX(-1)" } : undefined}
+            style={{
+              transform: mirror ? "scaleX(-1)" : undefined,
+              // 배경 교체가 켜지면 비디오는 소스로만 쓰고 합성 캔버스를 보여준다
+              visibility: bgStatus === "on" ? "hidden" : "visible",
+            }}
           />
+
+          {/* 배경 교체 합성 프리뷰 (비디오와 동일하게 미러) */}
+          {bgDesired && (
+            <canvas
+              ref={outCanvasRef}
+              className="absolute inset-0 h-full w-full object-cover"
+              style={{
+                transform: mirror ? "scaleX(-1)" : undefined,
+                display: bgStatus === "on" ? "block" : "none",
+              }}
+            />
+          )}
 
           {/* 카운트다운 오버레이 */}
           {phase === "capturing" && countdown > 0 && (
@@ -280,6 +362,30 @@ export default function CameraStage({
             </select>
           )}
 
+          {/* 배경 교체 토글 (템플릿이 배경 교체를 정의한 경우만) */}
+          {bgDesired && (
+            <div className="flex flex-col gap-1 rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+              <label className="flex items-center justify-between gap-2 text-sm font-medium">
+                <span>배경 교체</span>
+                <input
+                  type="checkbox"
+                  checked={bgEnabled}
+                  disabled={bgStatus === "failed"}
+                  onChange={(e) => setBgEnabled(e.target.checked)}
+                  className="h-4 w-4"
+                />
+              </label>
+              <p className="text-xs text-gray-500">
+                {bgStatus === "loading" && "배경 모델 불러오는 중…"}
+                {bgStatus === "on" && "인물만 남기고 배경을 교체합니다."}
+                {bgStatus === "failed" &&
+                  "이 기기에선 배경 교체를 쓸 수 없어 원본 카메라로 진행합니다."}
+                {bgStatus === "off" &&
+                  (bgEnabled ? "카메라 준비 후 적용됩니다." : "원본 카메라를 사용합니다.")}
+              </p>
+            </div>
+          )}
+
           {/* 스트립 사이드 미리보기 (캡처되며 채워짐) */}
           <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-2 dark:border-gray-700">
             {captured.map((bmp, i) => (
@@ -316,7 +422,7 @@ export default function CameraStage({
           {phase === "ready" && (
             <button
               onClick={startCapture}
-              className="rounded-lg bg-black px-6 py-3 font-semibold text-white dark:bg-white dark:text-black"
+              className="liquid-glass rounded-full px-6 py-3 font-semibold text-neutral-900 dark:text-white"
             >
               촬영 시작
             </button>
@@ -330,13 +436,13 @@ export default function CameraStage({
               <button
                 onClick={finish}
                 disabled={!allCaptured}
-                className="rounded-lg bg-black px-6 py-3 font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-black"
+                className="liquid-glass rounded-full px-6 py-3 font-semibold text-neutral-900 dark:text-white"
               >
                 이대로 완료
               </button>
               <button
                 onClick={startCapture}
-                className="rounded-lg border border-gray-400 px-6 py-3 font-semibold"
+                className="liquid-glass rounded-full px-6 py-3 font-semibold text-neutral-900 dark:text-white"
               >
                 전체 다시 찍기
               </button>
