@@ -8,7 +8,7 @@ const classicWhite: FrameTemplate = {
   name: "Classic White",
   thumbnail: "/templates/classic-white.png",
   background: { type: "color", value: "#FFFFFF" },
-  cameraBackground: { type: "none" }, // 원본 그대로 (분리 파이프라인 미사용)
+  cameraBackground: { type: "color", value: "#F3F5F8" }, // 흰 프레임(#FFF)보다 살짝 톤 다운된 화이트 → 배경 제거 + 사진/프레임 분리감
   slots: [
     { id: 1, x: 45, y: 45, width: 970, height: 728 },
     { id: 2, x: 45, y: 797, width: 970, height: 728 },
