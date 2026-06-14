@@ -323,10 +323,10 @@ export default function CameraStage({
             />
           )}
 
-          {/* 카운트다운 오버레이 */}
+          {/* 카운트다운 오버레이 — 얼굴(중앙)을 가리지 않도록 상단 중앙에 배치 */}
           {phase === "capturing" && countdown > 0 && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-[8rem] font-bold text-white drop-shadow-lg">
+            <div className="pointer-events-none absolute inset-x-0 top-4 flex justify-center">
+              <span className="flex h-20 w-20 items-center justify-center rounded-full bg-black/45 text-5xl font-bold text-white backdrop-blur-sm">
                 {countdown}
               </span>
             </div>
@@ -418,15 +418,6 @@ export default function CameraStage({
             ))}
           </div>
 
-          {phase === "ready" && (
-            <button
-              onClick={startCapture}
-              className="liquid-glass rounded-full px-6 py-3 font-semibold text-neutral-900 dark:text-white"
-            >
-              촬영 시작
-            </button>
-          )}
-
           {phase === "review" && (
             <div className="flex flex-col gap-2">
               <p className="text-center text-sm text-gray-500">
@@ -449,6 +440,16 @@ export default function CameraStage({
           )}
         </div>
       </div>
+
+      {/* 촬영 시작: 모바일/웹 공통 플로팅 버튼 */}
+      {phase === "ready" && (
+        <button
+          onClick={startCapture}
+          className="liquid-glass fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-full px-12 py-4 text-base font-semibold text-neutral-900 shadow-xl dark:text-white"
+        >
+          촬영 시작
+        </button>
+      )}
     </div>
   );
 }
