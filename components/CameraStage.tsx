@@ -81,9 +81,11 @@ export default function CameraStage({
   const [bgEnabled, setBgEnabled] = useState(true);
   const [bgStatus, setBgStatus] = useState<BgStatus>("off");
 
-  // 얼굴 보정(M13): 단일 ON/OFF. 기본 켜짐.
+  // 얼굴 보정(M13): ON/OFF + 강도 슬라이더. 기본 켜짐, 강도 50%.
   const [beautyEnabled, setBeautyEnabled] = useState(true);
   const [beautyStatus, setBeautyStatus] = useState<BgStatus>("off");
+  const [beautyIntensity, setBeautyIntensity] = useState(0.5); // 0~1
+  const beautyIntensityRef = useRef(beautyIntensity);
 
   const [captured, setCaptured] = useState<(ImageBitmap | null)[]>(
     () => Array.from({ length: cutCount }, () => null),
@@ -263,6 +265,7 @@ export default function CameraStage({
         .then((landmarker) => {
           if (cancelled || !videoRef.current) return;
           const beautifier = new FaceBeautifier(landmarker, videoRef.current);
+          beautifier.setIntensity(beautyIntensityRef.current);
           beautifierRef.current = beautifier;
           replacerRef.current?.setBeautifier(beautifier);
           setBeautyStatus("on");
@@ -284,6 +287,12 @@ export default function CameraStage({
       cancelled = true;
     };
   }, [bgDesired, bgEnabled, beautyEnabled, cameraLive, cameraBackground]);
+
+  // 슬라이더로 보정 강도를 실시간 반영(파이프라인 재구성 없이). ref는 생성 시점 주입용.
+  useEffect(() => {
+    beautyIntensityRef.current = beautyIntensity;
+    beautifierRef.current?.setIntensity(beautyIntensity);
+  }, [beautyIntensity]);
 
   const composited = bgStatus === "on" || beautyStatus === "on";
   const allCaptured = captured.every((b) => b !== null);
@@ -349,7 +358,8 @@ export default function CameraStage({
             autoPlay
             playsInline
             muted
-            // 프리뷰 비율을 스트립 슬롯(970×728 = 4:3)과 동일하게 → 보이는 영역 = 저장되는 컷(WYSIWYG)
+            // 비디오가 박스 크기를 정함: 슬롯(970×728=4:3)과 동일 비율. visibility:hidden이라
+            // 합성 캔버스로 스왑돼도 레이아웃이 유지되어 토글 시 크기 불변(WYSIWYG)
             className="aspect-[4/3] w-full object-cover"
             style={{
               transform: mirror ? "scaleX(-1)" : undefined,
@@ -444,6 +454,29 @@ export default function CameraStage({
               {beautyStatus === "off" &&
                 (beautyEnabled ? "카메라 준비 후 적용됩니다." : "원본 그대로 촬영합니다.")}
             </p>
+
+            {/* 보정 강도 슬라이더 */}
+            {beautyEnabled && beautyStatus !== "failed" && (
+              <label className="mt-1 flex flex-col gap-1">
+                <span className="flex items-center justify-between text-xs text-gray-500">
+                  <span>보정 강도</span>
+                  <span className="tabular-nums">
+                    {Math.round(beautyIntensity * 100)}%
+                  </span>
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={Math.round(beautyIntensity * 100)}
+                  onChange={(e) =>
+                    setBeautyIntensity(Number(e.target.value) / 100)
+                  }
+                  className="w-full accent-blue-500"
+                />
+              </label>
+            )}
           </div>
 
           {/* 스트립 사이드 미리보기 (캡처되며 채워짐) */}

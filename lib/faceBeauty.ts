@@ -16,12 +16,12 @@ const MODEL_URL =
 const DETECT_INPUT_LONG_SIDE = 384; // 랜드마크 입력 다운스케일(긴 변)
 const DETECT_INTERVAL_MS = 66; // 검출 ≈ 15fps (검출 사이 프레임은 마지막 랜드마크 재사용)
 
-// "자연 보정" 단일 프리셋 강도 (단일 ON/OFF). 값이 클수록 효과 강함.
+// "자연 보정" 100%(슬라이더 최대) 기준 강도. 실제 적용 = 이 값 × intensity(0~1).
 const BEAUTY = {
   jawPull: 0.1, // 하관 윤곽을 세로 중심선 쪽으로 당기는 최대 비율(V라인)
-  eyeScale: 1.14, // 눈 확대 배율
-  skinBlurPx: 6, // 피부 스무딩 블러
-  skinAlpha: 0.45, // 스무딩 블렌딩 강도
+  eyeScale: 1.14, // 눈 확대 배율(100%일 때)
+  skinBlurPx: 5, // 피부 스무딩 블러
+  skinAlpha: 0.5, // 스무딩 블렌딩 강도(100%일 때)
 } as const;
 
 // MediaPipe 468 메쉬의 눈 모서리 인덱스(좌/우 각각 외측·내측·상·하)
@@ -114,6 +114,7 @@ interface Pt {
  */
 export class FaceBeautifier {
   private enabled = true;
+  private intensity = 0.5; // 0~1 보정 강도(슬라이더)
   private landmarks: NormalizedLandmark[] | null = null;
   private lastDetect = -Infinity;
 
@@ -138,6 +139,11 @@ export class FaceBeautifier {
 
   setEnabled(on: boolean) {
     this.enabled = on;
+  }
+
+  /** 보정 강도 0~1 (0이면 사실상 원본). */
+  setIntensity(v: number) {
+    this.intensity = Math.max(0, Math.min(1, v));
   }
 
   get hasFace(): boolean {
@@ -178,7 +184,7 @@ export class FaceBeautifier {
     h: number,
     allowSlim: boolean,
   ) {
-    if (!this.enabled || !this.landmarks) return;
+    if (!this.enabled || !this.landmarks || this.intensity <= 0) return;
     const lm = this.landmarks;
     const px = (i: number): Pt => ({ x: lm[i].x * w, y: lm[i].y * h });
 
@@ -216,7 +222,7 @@ export class FaceBeautifier {
     }
     ctx.closePath();
     ctx.clip();
-    ctx.globalAlpha = BEAUTY.skinAlpha;
+    ctx.globalAlpha = BEAUTY.skinAlpha * this.intensity;
     ctx.filter = `blur(${BEAUTY.skinBlurPx}px)`;
     ctx.drawImage(target, 0, 0, w, h); // 자기 자신의 블러본을 클립 안에 덮음
     ctx.restore();
@@ -230,6 +236,7 @@ export class FaceBeautifier {
     h: number,
     px: (i: number) => Pt,
   ) {
+    const eyeScale = 1 + (BEAUTY.eyeScale - 1) * this.intensity;
     const snap = this.snapshot(target, w, h);
     for (const eye of [LEFT_EYE, RIGHT_EYE]) {
       const pts = eye.map((i) => px(i));
@@ -249,7 +256,7 @@ export class FaceBeautifier {
       // 확대 크롭
       ectx.save();
       ectx.translate(size / 2, size / 2);
-      ectx.scale(BEAUTY.eyeScale, BEAUTY.eyeScale);
+      ectx.scale(eyeScale, eyeScale);
       ectx.drawImage(snap, cx - R, cy - R, R * 2, R * 2, -R, -R, R * 2, R * 2);
       ectx.restore();
       // 원형 페더 마스크
@@ -280,58 +287,68 @@ export class FaceBeautifier {
     px: (i: number) => Pt,
   ) {
     if (ovalRing.length < 6) return;
+    const pull = BEAUTY.jawPull * this.intensity;
+    if (pull <= 0) return;
     const O = ovalRing.map((i) => px(i));
     const n = O.length;
-    // 얼굴 중심선/범위
+    // 얼굴 중심점/세로 범위
     let cxSum = 0;
+    let cySum = 0;
     let minY = Infinity;
     let maxY = -Infinity;
     for (const p of O) {
       cxSum += p.x;
+      cySum += p.y;
       if (p.y < minY) minY = p.y;
       if (p.y > maxY) maxY = p.y;
     }
-    const centerX = cxSum / n;
+    const C = { x: cxSum / n, y: cySum / n }; // 워핑 고정 중심
     const midY = (minY + maxY) / 2;
     const span = Math.max(1, maxY - midY);
-    // 내부 링: 윤곽을 무게중심 쪽으로 수축(소스/목적지 공통 고정점)
-    const cyAll = (minY + maxY) / 2;
-    const I = O.map((p) => ({
-      x: p.x + (centerX - p.x) * 0.22,
-      y: p.y + (cyAll - p.y) * 0.22,
-    }));
-    // 목적지 윤곽 O': 하관일수록 중심선 쪽으로 당김
+    // 목적지 윤곽 O': 하관일수록 중심선 쪽으로 당김(상반부는 거의 그대로)
     const Od = O.map((p) => {
-      const wgt = smoothstep((p.y - midY) / span); // 얼굴 하반부만
-      return { x: p.x + (centerX - p.x) * BEAUTY.jawPull * wgt, y: p.y };
+      const wgt = smoothstep((p.y - midY) / span);
+      return { x: p.x + (C.x - p.x) * pull * wgt, y: p.y };
     });
+    // 고정 외곽링 Q: 윤곽 바깥(목/볼/귀 쪽)으로 확장. 변위 0 → 바깥 인물과 이음새 없음.
+    const Q_EXPAND = 0.6;
+    const Q = O.map((p) => ({
+      x: p.x + (p.x - C.x) * Q_EXPAND,
+      y: p.y + (p.y - C.y) * Q_EXPAND,
+    }));
 
     const snap = this.snapshot(target, w, h);
 
-    // O–I 밴드(고스트 크레센트 포함)를 비운다.
+    // Q 내부를 비우고 다시 채운다: 안쪽 부채꼴(슬림) + 바깥 밴드(주변 살을 끌어당겨 빈틈 메움).
+    // → 구멍이 생기지 않아 흰 선 없음. Q는 고정이라 Q 바깥(원본 인물)과 연속.
     ctx.save();
     ctx.beginPath();
-    ringPath(ctx, O);
-    ringPath(ctx, I);
-    ctx.clip("evenodd");
+    ringPath(ctx, Q);
+    ctx.clip();
     ctx.clearRect(0, 0, w, h);
     ctx.restore();
 
-    // 밴드를 O'(슬림)–I(고정)로 재배치하며 삼각형 워핑.
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
-      // 소스 사각형: O[i],O[j],I[j],I[i]  → 목적지: Od[i],Od[j],I[j],I[i]
+      // 안쪽 부채꼴: C,O[i],O[j] → C,Od[i],Od[j] (얼굴 내부 슬림)
       drawTri(
-        ctx,
-        snap,
-        O[i].x, O[i].y, O[j].x, O[j].y, I[i].x, I[i].y,
-        Od[i].x, Od[i].y, Od[j].x, Od[j].y, I[i].x, I[i].y,
+        ctx, snap,
+        C.x, C.y, O[i].x, O[i].y, O[j].x, O[j].y,
+        C.x, C.y, Od[i].x, Od[i].y, Od[j].x, Od[j].y,
+        0.9,
+      );
+      // 바깥 밴드: O[i],O[j],Q[*] → Od[i],Od[j],Q[*] (목/볼을 끌어당겨 빈틈 채움)
+      drawTri(
+        ctx, snap,
+        O[i].x, O[i].y, O[j].x, O[j].y, Q[i].x, Q[i].y,
+        Od[i].x, Od[i].y, Od[j].x, Od[j].y, Q[i].x, Q[i].y,
+        0.9,
       );
       drawTri(
-        ctx,
-        snap,
-        O[j].x, O[j].y, I[j].x, I[j].y, I[i].x, I[i].y,
-        Od[j].x, Od[j].y, I[j].x, I[j].y, I[i].x, I[i].y,
+        ctx, snap,
+        O[j].x, O[j].y, Q[j].x, Q[j].y, Q[i].x, Q[i].y,
+        Od[j].x, Od[j].y, Q[j].x, Q[j].y, Q[i].x, Q[i].y,
+        0.9,
       );
     }
   }
@@ -343,12 +360,17 @@ function ringPath(ctx: CanvasRenderingContext2D, ring: Pt[]) {
   ctx.closePath();
 }
 
-/** 소스 삼각형 → 목적지 삼각형 affine 매핑으로 이미지를 그린다(목적지 삼각형 클립). */
+/**
+ * 소스 삼각형 → 목적지 삼각형 affine 매핑으로 이미지를 그린다.
+ * 클립은 (선택적으로) 부풀린 목적지 삼각형으로, 변환은 원본 매핑으로 → 인접 삼각형이
+ * 살짝 겹쳐 그려져 삼각형 사이 AA 틈(흰 선)이 사라진다.
+ */
 function drawTri(
   ctx: CanvasRenderingContext2D,
   img: CanvasImageSource,
   sx0: number, sy0: number, sx1: number, sy1: number, sx2: number, sy2: number,
   dx0: number, dy0: number, dx1: number, dy1: number, dx2: number, dy2: number,
+  inflatePx = 0,
 ) {
   const denom = sx0 * (sy2 - sy1) + sx1 * (sy0 - sy2) + sx2 * (sy1 - sy0);
   if (denom === 0) return;
@@ -366,11 +388,26 @@ function drawTri(
       dy1 * (sx0 * sy2 - sx2 * sy0) +
       dy2 * (sx1 * sy0 - sx0 * sy1)) /
     denom;
+  // 클립용 목적지 삼각형(무게중심 기준으로 inflatePx만큼 바깥으로)
+  let cx0 = dx0, cy0 = dy0, cx1 = dx1, cy1 = dy1, cx2 = dx2, cy2 = dy2;
+  if (inflatePx > 0) {
+    const gx = (dx0 + dx1 + dx2) / 3;
+    const gy = (dy0 + dy1 + dy2) / 3;
+    const push = (x: number, y: number): [number, number] => {
+      const ux = x - gx;
+      const uy = y - gy;
+      const len = Math.hypot(ux, uy) || 1;
+      return [x + (ux / len) * inflatePx, y + (uy / len) * inflatePx];
+    };
+    [cx0, cy0] = push(dx0, dy0);
+    [cx1, cy1] = push(dx1, dy1);
+    [cx2, cy2] = push(dx2, dy2);
+  }
   ctx.save();
   ctx.beginPath();
-  ctx.moveTo(dx0, dy0);
-  ctx.lineTo(dx1, dy1);
-  ctx.lineTo(dx2, dy2);
+  ctx.moveTo(cx0, cy0);
+  ctx.lineTo(cx1, cy1);
+  ctx.lineTo(cx2, cy2);
   ctx.closePath();
   ctx.clip();
   ctx.setTransform(a, b, c, d, e, f);
