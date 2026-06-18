@@ -3,6 +3,7 @@ import type {
   ImageSegmenterResult,
 } from "@mediapipe/tasks-vision";
 import type { CameraBackground } from "@/types";
+import type { FaceBeautifier } from "@/lib/faceBeauty";
 
 // JS는 npm 번들에서, wasm/모델은 CDN(버전 핀)에서 받는 표준 분리 구성.
 // 설치된 @mediapipe/tasks-vision 버전과 wasm 버전을 반드시 일치시킨다.
@@ -72,6 +73,7 @@ function ctx2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
 export class BackgroundReplacer {
   private bg: CameraBackground;
   private bgImage: HTMLImageElement | null = null;
+  private beautifier: FaceBeautifier | null = null;
 
   private readonly outCtx: CanvasRenderingContext2D;
   private readonly input: HTMLCanvasElement;
@@ -105,6 +107,11 @@ export class BackgroundReplacer {
     this.setBackground(bg);
   }
 
+  /** 얼굴 보정기를 주입/해제한다(M13). null이면 보정 미적용. */
+  setBeautifier(beautifier: FaceBeautifier | null) {
+    this.beautifier = beautifier;
+  }
+
   setBackground(bg: CameraBackground) {
     this.bg = bg;
     this.bgImage = null;
@@ -132,13 +139,19 @@ export class BackgroundReplacer {
   private loop = (now: number) => {
     if (!this.running) return;
     if (this.video.readyState >= 2 && this.video.videoWidth > 0) {
-      if (now - this.lastSeg >= SEG_INTERVAL_MS) {
+      // 배경이 none(보정 단독 모드)이면 세그멘테이션 자체를 생략(불필요한 추론 회피)
+      if (this.bg.type !== "none" && now - this.lastSeg >= SEG_INTERVAL_MS) {
         this.lastSeg = now;
         try {
           this.segment(now);
         } catch {
           // 분리 실패 프레임은 건너뛴다(다음 프레임 재시도)
         }
+      }
+      try {
+        this.beautifier?.detect(now); // 내부 스로틀(검출 ≈15fps)
+      } catch {
+        // 검출 실패 프레임 무시
       }
       try {
         this.composite();
@@ -228,6 +241,8 @@ export class BackgroundReplacer {
     if (!this.hasMask || this.bg.type === "none") {
       ctx.filter = "none";
       ctx.drawImage(this.video, 0, 0, vw, vh);
+      // 인물 레이어가 없는 경로 → 깎인 영역이 비칠 배경이 없으므로 V라인은 생략
+      this.applyBeauty(this.out, ctx, vw, vh, false);
       this.ready = true;
       return;
     }
@@ -254,6 +269,7 @@ export class BackgroundReplacer {
       // 이미지 미로드 등 → 원본 폴백
       ctx.drawImage(this.video, 0, 0, vw, vh);
       ctx.restore();
+      this.applyBeauty(this.out, ctx, vw, vh, false);
       this.ready = true;
       return;
     }
@@ -271,8 +287,26 @@ export class BackgroundReplacer {
     pctx.drawImage(this.mask, 0, 0, this.mask.width, this.mask.height, 0, 0, vw, vh);
     pctx.restore();
 
+    // 인물 레이어(투명 배경)에 보정 적용 → V라인으로 깎인 영역은 투명→배경이 비쳐 고스트 없음
+    this.applyBeauty(this.person, pctx, vw, vh, true);
+
     ctx.drawImage(this.person, 0, 0);
     this.ready = true;
+  }
+
+  private applyBeauty(
+    canvas: HTMLCanvasElement,
+    ctx: CanvasRenderingContext2D,
+    vw: number,
+    vh: number,
+    allowSlim: boolean,
+  ) {
+    if (!this.beautifier) return;
+    try {
+      this.beautifier.apply(canvas, ctx, vw, vh, allowSlim);
+    } catch {
+      // 보정 실패 프레임 무시(원본 유지)
+    }
   }
 
   /** 현재 합성된 프레임을 컷으로 캡처한다(mirror=true면 픽셀 공간에서 좌우 반전). */

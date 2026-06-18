@@ -11,6 +11,7 @@ import {
   type CameraErrorInfo,
 } from "@/lib/camera";
 import { BackgroundReplacer, loadSegmenter } from "@/lib/segmenter";
+import { FaceBeautifier, loadFaceLandmarker } from "@/lib/faceBeauty";
 import type { CameraBackground } from "@/types";
 
 type Phase = "idle" | "requesting" | "ready" | "capturing" | "review" | "error";
@@ -68,6 +69,7 @@ export default function CameraStage({
   const streamRef = useRef<MediaStream | null>(null);
   const outCanvasRef = useRef<HTMLCanvasElement>(null);
   const replacerRef = useRef<BackgroundReplacer | null>(null);
+  const beautifierRef = useRef<FaceBeautifier | null>(null);
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<CameraErrorInfo | null>(null);
@@ -78,6 +80,10 @@ export default function CameraStage({
   const bgDesired = !!cameraBackground && cameraBackground.type !== "none";
   const [bgEnabled, setBgEnabled] = useState(true);
   const [bgStatus, setBgStatus] = useState<BgStatus>("off");
+
+  // 얼굴 보정(M13): 단일 ON/OFF. 기본 켜짐.
+  const [beautyEnabled, setBeautyEnabled] = useState(true);
+  const [beautyStatus, setBeautyStatus] = useState<BgStatus>("off");
 
   const [captured, setCaptured] = useState<(ImageBitmap | null)[]>(
     () => Array.from({ length: cutCount }, () => null),
@@ -187,58 +193,99 @@ export default function CameraStage({
     onComplete(photos);
   }, [captured, cutCount, onComplete]);
 
-  // 언마운트 시 스트림 + 배경 교체 루프 정리
+  // 언마운트 시 스트림 + 합성 루프 정리
   useEffect(() => {
     return () => {
       stopStream(streamRef.current);
       replacerRef.current?.stop();
       replacerRef.current = null;
+      beautifierRef.current = null;
     };
   }, []);
 
-  // 배경 교체 컨트롤러 생명주기: 카메라가 라이브이고 토글이 켜졌을 때만 로드/실행
+  // 라이브 합성 파이프라인 생명주기(M7 배경 교체 + M13 얼굴 보정).
+  // 배경 교체 또는 얼굴 보정 중 하나라도 켜져 있으면 합성 루프(out 캔버스)를 돌린다.
   const cameraLive =
     phase === "ready" || phase === "capturing" || phase === "review";
   useEffect(() => {
     const video = videoRef.current;
     const out = outCanvasRef.current;
-    const shouldRun = bgDesired && bgEnabled && cameraLive && !!video && !!out;
+    const bgActive = bgDesired && bgEnabled;
+    const shouldRun = (bgActive || beautyEnabled) && cameraLive && !!video && !!out;
 
     if (!shouldRun) {
       if (replacerRef.current) {
         replacerRef.current.stop();
         replacerRef.current = null;
       }
-      // 실패 상태는 유지(폴백 안내), 그 외에는 off로
+      beautifierRef.current = null;
       setBgStatus((s) => (s === "failed" ? s : "off"));
+      setBeautyStatus((s) => (s === "failed" ? s : "off"));
       return;
     }
-    if (replacerRef.current) return; // 이미 실행 중
 
     let cancelled = false;
-    setBgStatus("loading");
-    loadSegmenter()
-      .then((segmenter) => {
-        if (cancelled || !videoRef.current || !outCanvasRef.current) return;
-        const replacer = new BackgroundReplacer(
-          segmenter,
-          videoRef.current,
-          outCanvasRef.current,
-          cameraBackground!,
-        );
-        replacer.start();
-        replacerRef.current = replacer;
-        setBgStatus("on");
-      })
-      .catch(() => {
-        // 모델 로드 실패/미지원 → 원본 카메라로 폴백(앱 중단 없음)
-        if (!cancelled) setBgStatus("failed");
-      });
+    // 배경 비활성(토글 off)인데 보정만 켠 경우 → 배경은 none(원본 통과)으로 두고 보정만.
+    const effectiveBg: CameraBackground = bgActive
+      ? cameraBackground!
+      : { type: "none" };
+
+    // 1) 합성 컨트롤러(세그멘터) 준비
+    if (!replacerRef.current) {
+      setBgStatus(bgActive ? "loading" : "off");
+      loadSegmenter()
+        .then((segmenter) => {
+          if (cancelled || !videoRef.current || !outCanvasRef.current) return;
+          const replacer = new BackgroundReplacer(
+            segmenter,
+            videoRef.current,
+            outCanvasRef.current,
+            effectiveBg,
+          );
+          if (beautifierRef.current) replacer.setBeautifier(beautifierRef.current);
+          replacer.start();
+          replacerRef.current = replacer;
+          setBgStatus(bgActive ? "on" : "off");
+        })
+        .catch(() => {
+          // 세그멘터 실패 → 원본 카메라로 폴백(앱 중단 없음)
+          if (!cancelled) setBgStatus(bgActive ? "failed" : "off");
+        });
+    } else {
+      replacerRef.current.setBackground(effectiveBg);
+      setBgStatus((s) => (s === "failed" ? s : bgActive ? "on" : "off"));
+    }
+
+    // 2) 얼굴 보정기(랜드마커) 준비/해제
+    if (beautyEnabled && !beautifierRef.current) {
+      setBeautyStatus("loading");
+      loadFaceLandmarker()
+        .then((landmarker) => {
+          if (cancelled || !videoRef.current) return;
+          const beautifier = new FaceBeautifier(landmarker, videoRef.current);
+          beautifierRef.current = beautifier;
+          replacerRef.current?.setBeautifier(beautifier);
+          setBeautyStatus("on");
+        })
+        .catch(() => {
+          // 랜드마커 실패/미지원 → 보정 없이 진행
+          if (!cancelled) setBeautyStatus("failed");
+        });
+    } else if (!beautyEnabled && beautifierRef.current) {
+      beautifierRef.current = null;
+      replacerRef.current?.setBeautifier(null);
+      setBeautyStatus("off");
+    } else if (beautifierRef.current) {
+      // 재생성된 replacer에 기존 보정기 재주입
+      replacerRef.current?.setBeautifier(beautifierRef.current);
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [bgDesired, bgEnabled, cameraLive, cameraBackground]);
+  }, [bgDesired, bgEnabled, beautyEnabled, cameraLive, cameraBackground]);
 
+  const composited = bgStatus === "on" || beautyStatus === "on";
   const allCaptured = captured.every((b) => b !== null);
 
   return (
@@ -306,30 +353,21 @@ export default function CameraStage({
             className="aspect-[4/3] w-full object-cover"
             style={{
               transform: mirror ? "scaleX(-1)" : undefined,
-              // 배경 교체가 켜지면 비디오는 소스로만 쓰고 합성 캔버스를 보여준다
-              visibility: bgStatus === "on" ? "hidden" : "visible",
+              // 배경 교체/보정이 켜지면 비디오는 소스로만 쓰고 합성 캔버스를 보여준다
+              visibility: composited ? "hidden" : "visible",
             }}
           />
 
-          {/* 배경 교체 합성 프리뷰 (비디오와 동일하게 미러) */}
-          {bgDesired && (
+          {/* 합성 프리뷰(배경 교체 + 얼굴 보정). 비디오와 동일하게 미러 */}
+          {(bgDesired || beautyEnabled) && (
             <canvas
               ref={outCanvasRef}
               className="absolute inset-0 h-full w-full object-cover"
               style={{
                 transform: mirror ? "scaleX(-1)" : undefined,
-                display: bgStatus === "on" ? "block" : "none",
+                display: composited ? "block" : "none",
               }}
             />
-          )}
-
-          {/* 카운트다운 오버레이 — 얼굴(중앙)을 가리지 않도록 상단 중앙에 배치 */}
-          {phase === "capturing" && countdown > 0 && (
-            <div className="pointer-events-none absolute inset-x-0 top-4 flex justify-center">
-              <span className="flex h-20 w-20 items-center justify-center rounded-full bg-black/45 text-5xl font-bold text-white backdrop-blur-sm">
-                {countdown}
-              </span>
-            </div>
           )}
 
           {/* 셔터 플래시 */}
@@ -385,6 +423,28 @@ export default function CameraStage({
               </p>
             </div>
           )}
+
+          {/* 얼굴 보정 토글 (M13: 눈 크게·V라인·피부 매끈) */}
+          <div className="flex flex-col gap-1 rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+            <label className="flex items-center justify-between gap-2 text-sm font-medium">
+              <span>자연 보정</span>
+              <input
+                type="checkbox"
+                checked={beautyEnabled}
+                disabled={beautyStatus === "failed"}
+                onChange={(e) => setBeautyEnabled(e.target.checked)}
+                className="h-4 w-4"
+              />
+            </label>
+            <p className="text-xs text-gray-500">
+              {beautyStatus === "loading" && "보정 모델 불러오는 중…"}
+              {beautyStatus === "on" && "눈·턱선·피부를 자연스럽게 보정합니다."}
+              {beautyStatus === "failed" &&
+                "이 기기에선 얼굴 보정을 쓸 수 없어 원본으로 진행합니다."}
+              {beautyStatus === "off" &&
+                (beautyEnabled ? "카메라 준비 후 적용됩니다." : "원본 그대로 촬영합니다.")}
+            </p>
+          </div>
 
           {/* 스트립 사이드 미리보기 (캡처되며 채워짐) */}
           <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-2 dark:border-gray-700">
@@ -449,6 +509,15 @@ export default function CameraStage({
         >
           촬영 시작
         </button>
+      )}
+
+      {/* 카운트다운: 카메라(얼굴)를 가리지 않도록 프리뷰 밖 화면 하단 플로팅 배지 */}
+      {phase === "capturing" && countdown > 0 && (
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-40 -translate-x-1/2">
+          <span className="liquid-glass flex h-16 w-16 items-center justify-center rounded-full text-4xl font-bold text-neutral-900 shadow-xl dark:text-white">
+            {countdown}
+          </span>
+        </div>
       )}
     </div>
   );
